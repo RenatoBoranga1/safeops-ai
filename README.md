@@ -1,106 +1,139 @@
-# Radar de Prevenção Operacional
+# SafeOps AI
 
-Painel preditivo para prevenção de acidentes em operações logísticas, com API Flask modular, autenticação por perfil, frontend executivo e esteira CI para lint, smoke test e deploy.
+Painel para análise histórica e previsão de volume de eventos de risco em operações logísticas, com backend Flask, autenticação por papel e dashboard web.
 
-## Preview
+> O repositório permanece `IA_Previsao_de_acidentes`. **SafeOps AI** é a identidade editorial recomendada; nenhuma renomeação remota foi realizada.
 
-### Dashboard desktop
+## Dados publicados
 
-![Dashboard desktop](docs/screenshots/dashboard-overview.png)
+Os únicos datasets publicados na árvore atual são **integralmente sintéticos**. Eles foram gerados por regras determinísticas, não foram derivados linha a linha de pessoas ou operações reais e não contêm nomes, CPF, placas, endereços ou coordenadas.
 
-### Dashboard mobile
+- `data/synthetic_safety_events.csv`: 30 registros fictícios, com datas e categorias de demonstração
+- `data/synthetic_dismissed_drivers.csv`: identificador artificial usado para testar o filtro
+- `scripts/generate_synthetic_data.py`: gerador reproduzível desses dois arquivos
 
-![Dashboard mobile](docs/screenshots/dashboard-mobile.png)
+Os rótulos `CONDUTOR-SINTETICO-*`, `ZONA-DEMO-*` e `*-DEMO` deixam explícito que nenhum registro representa uma pessoa, veículo ou local real. Bases operacionais devem permanecer fora do Git em `data/private/` ou `data/raw/` e só podem ser usadas após autorização e saneamento apropriados.
 
-## O que mudou nesta evolução
+## Problema
 
-- separação de camadas em módulos dedicados de configuração, autenticação, modelos, repositórios, serviços e rotas
-- autenticação por token com perfis `admin`, `gestor` e `analista`
-- endpoint administrativo protegido para diretório de usuários
-- frontend com login, sessão persistida, modo demo e painel administrativo por role
-- screenshots reais do dashboard publicadas no repositório
-- pipeline GitHub Actions para lint, smoke test e deploy por hook
+Equipes de segurança precisam consolidar ocorrências históricas, identificar concentrações por período e categoria e estimar a carga esperada de eventos futuros. A leitura deve separar claramente histórico, previsão e dados de demonstração.
 
-## Arquitetura
+## Solução implementada
+
+O backend carrega eventos de um arquivo CSV, normaliza o conjunto, produz agregações e gera previsão diária. A API retorna totais, rankings, hotspots e um resumo de risco consumido por um dashboard estático.
+
+```mermaid
+flowchart LR
+    CSV["Dataset configurado"] --> Repository["CsvDatasetRepository"]
+    Repository --> Service["PredictionService"]
+    Service --> Analytics["Agregações com Pandas"]
+    Service --> Predictor["NeuralProphet ou mock"]
+    Analytics --> API["Flask API"]
+    Predictor --> API
+    Auth["Token + RBAC"] --> API
+    API --> Dashboard["HTML, CSS e JavaScript"]
+```
+
+## O que é real, mock e apresentação
+
+### Backend real
+
+- aplicação Flask organizada em configuração, autenticação, modelos, repositórios, serviços e rotas
+- endpoint protegido de previsão por data
+- health check com estado do dataset e modo do preditor
+- autenticação por token e perfis `admin`, `gestor` e `analista`
+- leitura e agregação de CSV com Pandas
+
+### Modelo configurável
+
+- `APP_PREDICTOR_MODE=neuralprophet` treina e reutiliza um `NeuralProphet` sobre a série diária agregada
+- `APP_PREDICTOR_MODE=mock` usa média móvel e tendência simples, destinado a testes e desenvolvimento
+
+O projeto não publica métricas de acurácia nem afirma validação estatística em produção. Rankings por motorista, localidade e tipo de evento derivam das proporções históricas; não são modelos independentes de probabilidade causal.
+
+### Dados
+
+- `APP_DATA_FILE` usa por padrão `data/synthetic_safety_events.csv`
+- `APP_DISMISSED_DRIVERS_FILE` usa por padrão `data/synthetic_dismissed_drivers.csv`
+- ambos os arquivos podem ser recriados de modo idêntico pelo gerador versionado
+
+### Dashboard e modo demo
+
+O frontend é estático, feito com HTML, CSS e JavaScript. O parâmetro `?demo=1` permite apresentação visual com um payload integralmente sintético no navegador. Esse modo não comprova funcionamento do modelo NeuralProphet.
+
+## Screenshots
+
+Os screenshots antigos foram removidos porque reproduziam conteúdo do conjunto operacional anterior. Novas imagens podem ser geradas somente a partir do payload sintético atual:
+
+```powershell
+.\scripts\capture_dashboard.ps1
+```
+
+## Stack implementada
+
+- Python 3.11
+- Flask, Flask-Cors e Gunicorn
+- Pandas e NumPy
+- NeuralProphet, PyTorch e dependências de forecasting
+- HTML, CSS e JavaScript
+- Docker
+- Pytest e Ruff
+- GitHub Actions
+
+## Estrutura
 
 ```text
 .
-|-- app_previsao.py
-|-- radar_preventivo/
-|   |-- config.py
-|   |-- auth/
-|   |-- models/
-|   |-- repositories/
-|   |-- routes/
-|   `-- services/
-|-- index.html
-|-- style.css
-|-- script.js
-|-- auth_users.example.json
-|-- requirements.txt
-|-- requirements-dev.txt
-|-- requirements-ci.txt
-|-- docs/screenshots/
-|-- scripts/capture_dashboard.ps1
-`-- tests/
+├── app_previsao.py
+├── radar_preventivo/
+│   ├── auth/
+│   ├── models/
+│   ├── repositories/
+│   ├── routes/
+│   └── services/
+├── tests/
+├── data/                 # datasets pequenos e integralmente sintéticos
+├── scripts/              # gerador e captura segura da demonstração
+├── docs/screenshots/
+├── index.html
+├── script.js
+└── style.css
 ```
 
-## Perfis de acesso
+## API
 
-- `admin`: consulta o dashboard e acessa o diretório de usuários e permissões
-- `gestor`: acessa previsões, hotspots e leitura executiva
-- `analista`: acessa previsões, rankings e detalhamento técnico
+| Método e rota | Finalidade |
+| --- | --- |
+| `GET /health` | estado da aplicação, dataset e preditor |
+| `POST /auth/login` | autenticação |
+| `GET /auth/me` | sessão atual |
+| `GET /auth/users` | diretório protegido, somente `admin` |
+| `GET /predict?date=YYYY-MM-DD` | previsão e leitura analítica, autenticado |
 
-Os endpoints protegidos exigem token Bearer:
+## Configuração
 
-- `GET /auth/me`
-- `GET /auth/users` (`admin` apenas)
-- `GET /predict?date=YYYY-MM-DD`
+| Variável | Finalidade |
+| --- | --- |
+| `APP_DATA_FILE` | caminho do CSV sintético; default `data/synthetic_safety_events.csv` |
+| `APP_DISMISSED_DRIVERS_FILE` | filtro sintético; default `data/synthetic_dismissed_drivers.csv` |
+| `APP_AUTH_USERS_FILE` | arquivo local de usuários com hashes |
+| `APP_ALLOW_DEMO_USERS` | habilita usuários de demonstração; default `false` |
+| `APP_PREDICTOR_MODE` | `neuralprophet` ou `mock` |
+| `APP_SECRET_KEY` | segredo estável para assinatura de tokens |
+| `APP_TOKEN_TTL_SECONDS` | duração da sessão |
+| `APP_CORS_ORIGINS` | origens permitidas |
+| `FORECAST_DAYS` | horizonte de previsão |
+| `RECENT_HISTORY_DAYS` | janela histórica recente |
 
-## Autenticação
+Usuários reais devem ficar em `auth_users.json`, já ignorado pelo Git. As credenciais demonstrativas existentes no código só são carregadas quando `APP_ALLOW_DEMO_USERS=true`; esse modo deve permanecer desabilitado fora de desenvolvimento.
 
-### Usuários
+## Como executar localmente
 
-O backend procura usuários em `auth_users.json`. O arquivo de exemplo versionado é `auth_users.example.json`.
+O projeto inicia com o dataset sintético versionado. Para regenerá-lo de forma determinística:
 
-Fluxo recomendado:
-
-1. copiar `auth_users.example.json` para `auth_users.json`
-2. trocar os hashes e usuários pelos dados reais do ambiente
-3. manter `auth_users.json` fora do Git
-
-### Login
-
-`POST /auth/login`
-
-Exemplo:
-
-```json
-{
-  "email": "admin@radar.local",
-  "password": "Admin123!"
-}
+```bash
+python scripts/generate_synthetic_data.py
 ```
-
-Resposta:
-
-```json
-{
-  "access_token": "token-assinado",
-  "token_type": "Bearer",
-  "expires_in": 28800,
-  "user": {
-    "name": "Admin Demo",
-    "role": "admin",
-    "role_title": "Administrador",
-    "permissions": ["dashboard:view", "users:read", "auth:manage"]
-  }
-}
-```
-
-## Como rodar localmente
-
-### Backend
 
 ```bash
 python -m venv .venv
@@ -118,108 +151,35 @@ pip install -r requirements-dev.txt
 python .\app_previsao.py
 ```
 
-### Frontend
+Abra `index.html` para usar o dashboard.
 
-Abra `index.html` no navegador.
-
-Com backend local:
-
-- o frontend usa `http://127.0.0.1:5000` em `localhost`
-- em `file://`, ele usa o fallback configurado em `FALLBACK_BACKEND_URL`
-- você pode sobrescrever a API com `?api=https://sua-api`
-
-Modo demo para apresentação e screenshots:
-
-```text
-index.html?demo=1
-index.html?demo=1&demoRole=admin
-```
-
-## Deploy no Railway
-
-O repositório agora inclui:
-
-- `Dockerfile`
-- `.dockerignore`
-- `railway.json`
-
-Isso faz o Railway usar build por Dockerfile em vez de depender da detecção automática do Railpack.
-
-### Variáveis recomendadas no Railway
-
-- `APP_SECRET_KEY`: chave de assinatura dos tokens
-- `APP_ALLOW_DEMO_USERS=true`: útil para validar a API rapidamente
-- `APP_PREDICTOR_MODE=neuralprophet`: modo real
-
-Se você ainda não tiver um `auth_users.json` real no deploy, use `APP_ALLOW_DEMO_USERS=true` temporariamente para testar login com:
-
-- `admin@radar.local` / `Admin123!`
-- `gestor@radar.local` / `Gestor123!`
-- `analista@radar.local` / `Analista123!`
-
-Depois, substitua por usuários reais via `APP_AUTH_USERS_FILE` ou imagem customizada com o arquivo apropriado.
-
-## Geração de screenshots
-
-Script incluído:
-
-```powershell
-.\scripts\capture_dashboard.ps1
-```
-
-O script usa Chrome headless para gerar:
-
-- `docs/screenshots/dashboard-overview.png`
-- `docs/screenshots/dashboard-mobile.png`
-
-## Testes e pipeline
-
-### Lint local
+## Testes e CI
 
 ```bash
 ruff check .
-```
-
-### Smoke test local
-
-```bash
 pytest
 ```
 
-Os testes usam `predictor_mode=mock`, evitando depender de treinamento real do NeuralProphet no CI.
+Os testes usam `predictor_mode=mock` e fixtures temporárias, evitando treinar NeuralProphet. O workflow executa lint e smoke tests; hooks de deploy só são acionados quando os secrets correspondentes existem no GitHub.
 
-### GitHub Actions
+## Segurança e privacidade
 
-Workflow em `.github/workflows/ci.yml`:
+- demo users vêm desabilitados por padrão
+- arquivo real de usuários não é versionado
+- a chave de sessão é gerada em runtime quando não configurada; deploys devem fornecer uma chave externa estável
+- CORS deve ser restrito no ambiente implantado
+- dados pessoais devem seguir minimização, finalidade, retenção e controle de acesso
+- a árvore pública usa somente dados sintéticos; dados operacionais são explicitamente ignorados
 
-- instala dependências leves de CI
-- roda `ruff check .`
-- roda `pytest`
-- dispara deploy via hooks do Render em `main`
+## Limitações
 
-Secrets esperados para deploy:
+- não há métricas versionadas de qualidade do modelo
+- o mock valida o contrato e o fluxo, não a acurácia do NeuralProphet
+- armazenamento de usuários em JSON é adequado apenas ao escopo atual
+- revogação server-side de tokens não foi implementada
+- o frontend persiste a sessão no navegador
+- a remoção da versão antiga dos dados do histórico Git permanece pendente de autorização específica
 
-- `RENDER_BACKEND_DEPLOY_HOOK_URL`
-- `RENDER_FRONTEND_DEPLOY_HOOK_URL`
+## Autor
 
-## Configurações úteis
-
-- `APP_DATA_FILE`: caminho do CSV principal
-- `APP_DISMISSED_DRIVERS_FILE`: caminho do CSV de motoristas desligados
-- `APP_AUTH_USERS_FILE`: caminho do arquivo real de usuários
-- `APP_ALLOW_DEMO_USERS`: habilita usuários demo no backend
-- `APP_PREDICTOR_MODE`: `neuralprophet` ou `mock`
-- `APP_SECRET_KEY`: chave de assinatura dos tokens
-- `APP_TOKEN_TTL_SECONDS`: validade do token
-- `FORECAST_DAYS`: horizonte da previsão
-- `RECENT_HISTORY_DAYS`: janela da série recente
-
-## Observações de deploy
-
-- o fluxo de deploy do workflow usa hooks para desacoplar CI de provedor
-- o frontend continua estático e pode ser hospedado em Render, Netlify, Vercel ou GitHub Pages
-- o backend suporta mock mode para smoke tests e NeuralProphet para ambiente real
-
-## Crédito
-
-Projeto de Renato Boranga, evoluído para uma base mais profissional com foco em produto, governança de acesso, apresentação visual e operação contínua.
+Renato Boranga

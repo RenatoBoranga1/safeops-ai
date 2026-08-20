@@ -31,11 +31,16 @@ class AppSettings:
 
         return cls(
             base_dir=base_dir,
-            data_file=Path(os.getenv("APP_DATA_FILE", base_dir / "basedadosseguranca.csv")),
+            data_file=Path(
+                os.getenv(
+                    "APP_DATA_FILE",
+                    base_dir / "data" / "synthetic_safety_events.csv",
+                )
+            ),
             dismissed_drivers_file=Path(
                 os.getenv(
                     "APP_DISMISSED_DRIVERS_FILE",
-                    base_dir / "motoristas_desligados.csv",
+                    base_dir / "data" / "synthetic_dismissed_drivers.csv",
                 )
             ),
             auth_users_file=Path(os.getenv("APP_AUTH_USERS_FILE", base_dir / "auth_users.json")),

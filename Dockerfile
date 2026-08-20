@@ -17,8 +17,7 @@ RUN pip install --upgrade pip \
 
 COPY app_previsao.py .
 COPY radar_preventivo ./radar_preventivo
-COPY basedadosseguranca.csv .
-COPY motoristas_desligados.csv .
+COPY data ./data
 
 EXPOSE 8080
 
